@@ -49,6 +49,27 @@ The script will run several compilers with several compiler options and run exec
 
 Also you may want to test compilers for future hardware, which is not available to you at the moment. The standard way to do that is to download the [Intel® Software Development Emulator](http://www.intel.com/software/sde). ``run_gen.py`` assumes that it is available in your ``$PATH``.
 
+Binary downloads
+----------------
+
+GitHub Actions builds Release-mode YARPGen executables for Linux (x86-64 and
+AArch64), macOS (Intel and Apple Silicon), and Windows (x86-64). Each archive
+contains the ``yarpgen`` executable, this README, and ``LICENSE.txt``.
+
+* For a branch or pull-request build, open the
+  [binary builds workflow](https://github.com/bingundu/yarpgen/actions/workflows/binary-builds.yml),
+  select a successful run, and download the artifact named for your platform.
+  Run artifacts expire after 30 days.
+* For a tagged release (``v*``), download the individual ``.tar.gz``
+  (Linux/macOS) or ``.zip`` (Windows) files from the
+  [Releases page](https://github.com/bingundu/yarpgen/releases).
+  Tags trigger the workflow only after this workflow is merged into the
+  repository's default branch.
+
+These are native binaries for their listed operating system and CPU
+architecture; they are not statically linked or code-signed. Run
+``yarpgen --version`` after extraction to verify the executable.
+
 ISPC testing
 ------------
 
