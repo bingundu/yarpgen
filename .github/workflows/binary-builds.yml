@@ -1,0 +1,125 @@
+name: Build distributable YARPGen binaries
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+            cmake_args: ''
+            bin_dir: build
+            exe: ''
+          - target: linux-aarch64
+            runner: ubuntu-24.04-arm
+            cmake_args: ''
+            bin_dir: build
+            exe: ''
+          - target: macos-x86_64
+            runner: macos-15-intel
+            cmake_args: ''
+            bin_dir: build
+            exe: ''
+          - target: macos-arm64
+            runner: macos-15
+            cmake_args: ''
+            bin_dir: build
+            exe: ''
+          - target: windows-x86_64
+            runner: windows-2022
+            cmake_args: '-A x64'
+            bin_dir: build/Release
+            exe: .exe
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure Release build
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release ${{ matrix.cmake_args }}
+
+      - name: Compile
+        shell: bash
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Run unit tests
+        shell: bash
+        run: |
+          for test in type_test data_test expr_test gen_test; do
+            "${{ matrix.bin_dir }}/$test${{ matrix.exe }}"
+          done
+
+      - name: Smoke-test generator
+        shell: bash
+        run: |
+          "${{ matrix.bin_dir }}/yarpgen${{ matrix.exe }}" --version
+          mkdir -p smoke
+          "${{ matrix.bin_dir }}/yarpgen${{ matrix.exe }}" --seed=12345 --std=c++ --out-dir=smoke
+          test -s smoke/init.h
+          test -s smoke/func.cpp
+          test -s smoke/driver.cpp
+
+      - name: Package executable and license
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="yarpgen-${{ matrix.target }}"
+          mkdir -p "package/$target" dist
+          cp "${{ matrix.bin_dir }}/yarpgen${{ matrix.exe }}" "package/$target/"
+          cp README.md LICENSE.txt "package/$target/"
+          cd package
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cmake -E tar cf "../dist/$target.zip" --format=zip "$target"
+          else
+            cmake -E tar czf "../dist/$target.tar.gz" "$target"
+          fi
+
+      - name: Upload binary archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: yarpgen-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish versioned binaries
+    needs: binaries
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all binary archives
+        uses: actions/download-artifact@v8
+        with:
+          pattern: yarpgen-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+          fi
