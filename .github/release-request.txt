@@ -1,0 +1,3 @@
+Release request: yarpgen-binary-20261028-1
+Use verified successful artifact workflow run 39382815359, source commit 251c5a148ade11d039d5bbbb1e5917b89bd5a785.
+The workflow publishes the existing Linux x86-64 binary only; do not rebuild.
