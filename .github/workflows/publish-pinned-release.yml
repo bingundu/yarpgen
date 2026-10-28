@@ -1,0 +1,65 @@
+name: Publish pinned YARPGen Linux binary release
+
+# This workflow consumes a verified binary artifact from a finished run,
+# avoiding the five-platform rebuild when publishing a version for downstream CI.
+on:
+  push:
+    branches: [ci/binary-builds]
+    paths:
+      - '.github/release-request.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: '39382815359'
+      SOURCE_SHA: '251c5a148ade11d039d5bbbb1e5917b89bd5a785'
+      RELEASE_TAG: 'yarpgen-binary-20261028-1'
+    steps:
+      - name: Confirm artifact comes from successful pinned source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" --jq .head_sha)" = "$SOURCE_SHA"
+          test "$(gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" --jq .conclusion)" = "success"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to republish"
+            exit 1
+          fi
+      - name: Fetch already-built Linux x86-64 artifact (no compilation)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist smoke
+          gh run download "$SOURCE_RUN" -n yarpgen-linux-x86_64 -D dist
+          test -s dist/yarpgen-linux-x86_64.tar.gz
+          tar -xzf dist/yarpgen-linux-x86_64.tar.gz -C smoke
+          test -x smoke/yarpgen-linux-x86_64/yarpgen
+          smoke/yarpgen-linux-x86_64/yarpgen --version
+          mkdir -p example
+          smoke/yarpgen-linux-x86_64/yarpgen \
+            --seed=12345 --std=c --out-dir=example
+          test -s example/init.h
+          test -s example/func.c
+          test -s example/driver.c
+      - name: Record immutable archive digest and publish versioned release
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum yarpgen-linux-x86_64.tar.gz > SHA256SUMS)
+          printf 'binary_source_sha=%s\nbinary_workflow_run=%s\n' \
+            "$SOURCE_SHA" "$SOURCE_RUN" > dist/PROVENANCE.txt
+          cat dist/SHA256SUMS
+          gh release create "$RELEASE_TAG" \
+            dist/yarpgen-linux-x86_64.tar.gz dist/SHA256SUMS dist/PROVENANCE.txt \
+            --target "$GITHUB_SHA" \
+            --title "Pinned YARPGen Linux x86-64 for compiler CI" \
+            --notes "Reproducible Linux binary from successful workflow run $SOURCE_RUN; original generator source SHA $SOURCE_SHA. Uses existing build artifact without rebuilding YARPGen. Suitable for pinned integration tests."

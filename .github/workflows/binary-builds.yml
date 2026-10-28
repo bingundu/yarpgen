@@ -6,6 +6,9 @@ on:
       - '**'
     tags:
       - 'v*'
+    paths-ignore:
+      - '.github/release-request.txt'
+      - '.github/workflows/publish-pinned-release.yml'
   pull_request:
   workflow_dispatch:
 

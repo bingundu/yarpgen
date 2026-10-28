@@ -1,6 +1,13 @@
 name: Build YARPGen and generate sample tests
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main, ci/binary-builds]
+    paths-ignore:
+      - '.github/release-request.txt'
+      - '.github/workflows/publish-pinned-release.yml'
+  pull_request:
+  workflow_dispatch:
 
 permissions: read-all
 
